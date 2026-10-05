@@ -1,5 +1,3 @@
-log(localStorage.getItem("main"))
-log(localStorage.getItem("version"))
 function gebid(input){
     return document.getElementById(input);
 }
@@ -21,9 +19,12 @@ function clearLog(){
     gebid("logs").innerHTML = "Logs: "
 }
 var gameMusic = false;
+var enemiesStillSpawning = true;
 var TDHealth = 5;
 var doors = ["correct", "false", "random"]
-var gameVersion = "X.5";
+var alreadyChosenRandomDoor = false;
+var doorsFloors = 6
+var gameVersion = "X.6";
 var maxForBar = 0, currentProgress = 0;
 var timeLeft = 0;
 var activeTree = null;
@@ -88,11 +89,61 @@ function addStatsToPopup(){
 }
 
 function closeAllMenus(event) {
-    if (event && event.target !== event.currentTarget) return; 
+    if (event && event.target != event.currentTarget) return; 
     const menus = ["helpMenu", "gameMenu", "statsPopup", "powerMenu", "systemMenu", "settingsMenu"];
     menus.forEach(menuId => {
         if(gebid(menuId)) gebid(menuId).className = "closedMenu";
     });
+}
+function pickGreenDoor(){
+    if(doors[0] == "correct"){
+        advanceFloorDoors();
+    }
+    else if(doors[0] == "false"){
+        gameOver("wrongDoor");
+    }
+    else{
+        openRandomDoor();
+    }
+}
+function pickBlueDoor(){
+    if(doors[1] == "correct"){
+        advanceFloorDoors();
+    }
+    else if(doors[1] == "false"){
+        gameOver("wrongDoor");
+    }
+    else{
+        openRandomDoor();
+    }
+}
+function pickRedDoor(){
+    if(doors[2] == "correct"){
+        advanceFloorDoors();
+    }
+    else if(doors[2] == "false"){
+        gameOver("wrongDoor");
+    }
+    else{
+        openRandomDoor();
+    }
+}
+function advanceFloorDoors(){
+    doorsFloors--;
+    if(doorsFloors == 1){
+        win();
+    }
+    else{
+        shuffleArray(doors);
+        alreadyChosenRandomDoor = false;
+        gebid("doorsInfoP").innerHTML = "Floor " + doorsFloors + ". " + (doorsFloors-1) + " floors remaining."
+        alert("You descend one floor down... and find 3 more doors. Your choice repeats.")
+    }
+}
+function openRandomDoor(){
+    if(alreadyChosenRandomDoor){var randomChoice = getRandomNumber(5); if(randomChoice==1){gameOver("wrongDoor")}else if(randomChoice==2){win()}else if(randomChoice==3){advanceFloorDoors();}else if(randomChoice==4){doorsFloors+= 2}else{doorsFloors++;advanceFloorDoors();}return;}
+    alert("You found the random door! Click the door you just clicked to choose a random outcome, or click another door to choose it instead. ")
+    alreadyChosenRandomDoor = true;
 }
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -111,6 +162,7 @@ function showPowerOptions(){ closeAllMenus(); if(gebid("powerMenu")) gebid("powe
 function exitGame(){
     tree = null, currentProgress = 0, activeTree = null, currentFolderId = -1, globalIDCounter = 0;
     gebid("fileExplorer").classList = "closedMenu"
+    gebid("doorsPopup").classList = "closedMenu"
 }
 function openPopup(popupID){
     if(popupID == "win.exe"){
@@ -188,7 +240,7 @@ function startGame(gameID1){
     else if(gameID1 == 8){startSpeedrun(31); gameMusic = false;}
     else if(gameID1 == 6){startTowerDefense();}
     else if(gameID1 == 3){startScreensaver();}
-    else if(gameID1 = 9){startDoors();}
+    else if(gameID1 = 9){startDoors(); doorsFloors = 6; shuffleArray(doors);}
     else{gameMusic = new Audio("images/sounds/BGM's/NormalMusic.wav");gameMusic.play();}
     gameId = gameID1;
     activeTree = tree;
@@ -232,26 +284,17 @@ function startScreensaver(){
 }
 var screensavesInterval, bombPlaceInterval;
 function updateScreensavers() {
-    // 1. Convert to static arrays so removing items doesn't break the loop indexes
     var screensavers = Array.from(document.getElementsByClassName("screensaverBouncing"));
     var bombs = Array.from(document.getElementsByClassName("bombScreensaver"));
-
-    // Loop backwards when removing items from arrays to avoid index-shifting bugs
     for (var i = screensavers.length - 1; i >= 0; i--) {
         var screensaver = screensavers[i];
-        
-        // Safety check in case the screensaver was already removed in a previous sub-loop
         if (!screensaver.parentNode) continue; 
         var screensaverBox = screensaver.getBoundingClientRect();
 
         for (var j = bombs.length - 1; j >= 0; j--) {
             var bomb = bombs[j];
-            
-            // Safety check in case the bomb was already removed
             if (!bomb.parentNode) continue; 
             var bombBox = bomb.getBoundingClientRect();
-
-            // 2. CORRECT COLLISION LOGIC: Check if they actually overlap
             var isColliding = !(
                 screensaverBox.top > bombBox.bottom ||
                 screensaverBox.right < bombBox.left ||
@@ -276,23 +319,17 @@ function updateScreensavers() {
 function placeBomb(){
     var bomb = document.createElement("img");
     bomb.classList = "bombScreensaver"
-    bomb.style.left = String((mouseX - parseInt(window.innerHeight)*0.025)) + "px"
-    bomb.style.top = String((mouseY - parseInt(window.innerHeight)*0.025)) + "px"
+    bomb.style.left = String((mouseX - parseInt(window.innerWidth)*0.025)) + "px"
+    bomb.style.top = String((mouseY - parseInt(window.innerWidth)*0.025)) + "px"
     bomb.src="images/random/bomb.png"
     document.body.appendChild(bomb)
 }
 function createScreensaverEnemy(){
     var screensaver = document.createElement("img");
     screensaver.classList = "screensaverBouncing";
-    
-    // 1. Randomize the horizontal duration (e.g., between 4.0s and 7.0s)
     var durationX = (getRandomNumber(30) + 40) / 10; 
-    // 2. Randomize the vertical duration (e.g., between 2.5s and 5.5s)
-    var durationY = (getRandomNumber(30) + 25) / 10; 
-    // 3. Randomize the delay based on a maximum 7-second cycle
-    var randomDelay = -(getRandomNumber(70) / 10); 
-
-    // Pass all three values as CSS custom properties
+    var durationY = (getRandomNumber(30) + 25) / 10;
+    var randomDelay = -(getRandomNumber(70) / 10);
     screensaver.style.setProperty("--durX", durationX + "s");
     screensaver.style.setProperty("--durY", durationY + "s");
     screensaver.style.setProperty("--randomDelay", randomDelay + "s");
@@ -302,15 +339,20 @@ function createScreensaverEnemy(){
 }
 window.addEventListener("mousemove", function(event){mouseX = event.clientX; mouseY = event.clientY;})
 function startTowerDefense(){
-    var amount = getRandomNumber(500) + 250;
+    var amount = getRandomNumber(30) + 20;
+    if(gameVersion.includes("dev")){amount = 10;}
+    log(amount)
+    enemiesStillSpawning = true;
     for (var i = 0; i < amount; i++){
         setTimeout((currentId) => createEnemy(currentId), (2500 * i)-(2*i), i);
     }
+    setTimeout(() => {enemiesStillSpawning = false}, (2500*amount)-(2*amount))
     setInterval(updateEnemies, 1000 / 60);
 }
 
 function updateEnemies(){
     var enemies = document.getElementsByClassName("towerDefenseEnemy");
+    if(enemies.length == 0 && !enemiesStillSpawning){enemiesStillSpawning = true; win();}
     for (var i = enemies.length - 1; i >= 0; i--){
         var enemy = enemies[i];
         var currentLeft = parseInt(enemy.style.left) || 0;
@@ -377,6 +419,7 @@ function win(gameID, timeLeft = 0){
     }
     pointsEarned = (levels[0]*difficulty*1000)+(100*timeLeft)+bonusPoints;
     openPopup("win.exe")
+    exitGame();
 }
 function deleteFile(id) {
     var whatToDel = findNodeById(tree, id);
@@ -491,15 +534,15 @@ var speedrunInterval = null;
 var countdownInterval = null;
 
 function gameOver(typeDeath) {
-    if(typeDeath = "noHPLeft"){
+    if(typeDeath == "noHPLeft"){
         alert("No heath left...")
         gebid("BSODImg").src = "images/BSODs/95-user.svg"
     }
-    if(typeDeath = "speedrunTime"){
+    if(typeDeath == "speedrunTime"){
     clearInterval(speedrunInterval);
     alert("Time's up! Game Over.");
     gebid("BSODImg").src="images/BSODs/95-time.svg"}
-    exitGame();
+    else if(typeDeath == "wrongDoor"){alert("Oh no! You chose the wrong door. Game Over.");gebid("BSODImg").src="images/BSODs/95-user.svg"}
     gebid("BSODImg").classList = "BSODShow"
     gebid("BSOD").classList = "ShowBSOD"
 }
