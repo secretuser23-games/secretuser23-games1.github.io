@@ -34,7 +34,8 @@ var gameId = 0;
 var pointsEarned = 0;
 var hasOpenedHelp = false;
 var globalIdCounter = 0;
-var currentOS = parseInt(gebid("inGameVersion").innerHTML); 
+const osElement = gebid("inGameVersion");
+var currentOS = osElement ? parseInt(osElement.innerHTML) : 1; 
 var percentToNewOS, maxPercentToNewOS, levels, specs, OSesUnlocked;
 if (localStorage.getItem("version") !== gameVersion || localStorage.getItem("main") === null) {
     localStorage.setItem("version", gameVersion);
@@ -48,11 +49,11 @@ if (localStorage.getItem("version") !== gameVersion || localStorage.getItem("mai
     OSesUnlocked = getCookieJsonValue("main", "OSesUnlocked");
 }
 function createCookie() {
-    levels =[1,1];
+    levels =[1,1,1];
     specs = ["4 MB RAM", "66 Mhz CPU", "Integrated GPU, 1MB Vram", '14" CRT Screen, 360p', "512 MB HDD"];
     percentToNewOS = 0;
     maxPercentToNewOS = 100000;
-    OSesUnlocked = [true, false];
+    OSesUnlocked = [true, false, false];
 }
 
 function editCookie() {
@@ -156,13 +157,44 @@ function shuffleArray(array) {
 function openHelpMenu(){ closeAllMenus(); if(gebid("helpMenu")) gebid("helpMenu").className = "openHelpMenu"; hasOpenedHelp = true;}
 function openSystemMenu(){ closeAllMenus(); if(gebid("systemMenu")) gebid("systemMenu").className = "openSysMenu"; }
 function openStats(){ closeAllMenus(); if(gebid("statsPopup")) gebid("statsPopup").className = "openMenu"; addStatsToPopup(); }
-function showGameOptions(){ closeAllMenus(); if(gebid("gameMenu")) gebid("gameMenu").className = "openGameMenu"; }
+function showGameOptions(){ closeAllMenus(); if(gebid("gameMenu")) gebid("gameMenu").className = "openGameMenu"; exitGame();}
 function openSettings(){ closeAllMenus(); if(gebid("settingsMenu")) gebid("settingsMenu").className = "openGearMenu"; }
 function showPowerOptions(){ closeAllMenus(); if(gebid("powerMenu")) gebid("powerMenu").className = "openPowMenu"; }
-function exitGame(){
-    tree = null, currentProgress = 0, activeTree = null, currentFolderId = -1, globalIDCounter = 0;
-    gebid("fileExplorer").classList = "closedMenu"
-    gebid("doorsPopup").classList = "closedMenu"
+function exitGame() {
+    if (typeof speedrunInterval !== 'undefined') clearInterval(speedrunInterval);
+    if (typeof countdownInterval !== 'undefined') clearInterval(countdownInterval);
+    if (typeof updateEnemies !== 'undefined') clearInterval(updateEnemies);
+    if (typeof screensaversInterval !== 'undefined') clearInterval(screensaversInterval);
+    if (typeof bombPlaceInterval !== 'undefined') clearInterval(bombPlaceInterval);
+    if (typeof spawningEnemies !== 'undefined' && Array.isArray(spawningEnemies)) {
+        spawningEnemies.forEach(timeoutId => clearTimeout(timeoutId));
+        spawningEnemies = [];
+    }
+    if (gameMusic) {
+        if (typeof gameMusic.pause === 'function') {
+            gameMusic.pause();
+        }
+        gameMusic = false;
+    }
+    const activeEnemies = Array.from(document.getElementsByClassName("towerDefenseEnemy"));
+    activeEnemies.forEach(enemy => enemy.remove());
+    const activeScreensavers = Array.from(document.getElementsByClassName("screensaverBouncing"));
+    activeScreensavers.forEach(saver => saver.remove());
+    const activeBombs = Array.from(document.getElementsByClassName("bombScreensaver"));
+    activeBombs.forEach(bomb => bomb.remove());
+    tree = null;
+    currentProgress = 0;
+    activeTree = null;
+    currentFolderID = -1;
+    globalIdCounter = 0;
+    alreadyChosenRandomDoor = false;
+    doorsFloors = 6;
+    TDHealth = 5;
+    if(gebid("fileExplorer")) gebid("fileExplorer").classList = "closedMenu";
+    if(gebid("doorsPopup")) gebid("doorsPopup").classList = "closedMenu";
+    if(gebid("gameModeInTaskbar")) gebid("gameModeInTaskbar").classList = "closedMenu";
+    if(gebid("timerForSpeedrun")) gebid("timerForSpeedrun").classList = "closedMenu";
+    if(gebid("countdownForSpeedrun")) gebid("countdownForSpeedrun").classList = "closedMenu";
 }
 function openPopup(popupID){
     if(popupID == "win.exe"){
@@ -202,6 +234,12 @@ function unlockNextOS(){
         percentToNewOS = 0;
         maxPercentToNewOS = 150000
     }
+    else if(OSesUnlocked[2] == false){
+        OSesUnlocked[2] = true;
+        specs = ["16 MB Ram", "200 Mhz CPU", "Integrated GPU, 4MV Vram", '20" CRT Screen, 480p', "1 GB HDD"]
+        percentToNewOS = 0;
+        maxPercentToNewOS = 200000
+    }
     editCookie();
     openOSExplorer();
 }
@@ -209,9 +247,8 @@ function openOSExplorer(){
     document.location = "index.html"
 }
 function startGame(gameID1){
+    exitGame();
     log("Started Game with Game ID " + gameID1)
-    clearInterval(speedrunInterval); 
-    clearInterval(countdownInterval);
     gebid("timerForSpeedrun").classList = "closedMenu";
     gebid("gameMenu").classList = "closedMenu";
     gebid("fileExplorer").className = "fileExplorer";
@@ -240,7 +277,7 @@ function startGame(gameID1){
     else if(gameID1 == 8){startSpeedrun(31); gameMusic = false;}
     else if(gameID1 == 6){startTowerDefense();}
     else if(gameID1 == 3){startScreensaver();}
-    else if(gameID1 = 9){startDoors(); doorsFloors = 6; shuffleArray(doors);}
+    else if(gameID1 == 9){startDoors(); doorsFloors = 6; shuffleArray(doors);}
     else{gameMusic = new Audio("images/sounds/BGM's/NormalMusic.wav");gameMusic.play();}
     gameId = gameID1;
     activeTree = tree;
@@ -339,25 +376,43 @@ function createScreensaverEnemy(){
 }
 window.addEventListener("mousemove", function(event){mouseX = event.clientX; mouseY = event.clientY;})
 function startTowerDefense(){
-    var amount = getRandomNumber(30) + 20;
-    if(gameVersion.includes("dev")){amount = 10;}
-    log(amount)
-    enemiesStillSpawning = true;
-    for (var i = 0; i < amount; i++){
-        setTimeout((currentId) => createEnemy(currentId), (2500 * i)-(2*i), i);
-    }
-    setTimeout(() => {enemiesStillSpawning = false}, (2500*amount)-(2*amount))
-    setInterval(updateEnemies, 1000 / 60);
-}
+    if (enemyMovementInterval) clearInterval(enemyMovementInterval);
+    if (enemySpawnCapTimeout) clearTimeout(enemySpawnCapTimeout);
+    spawningEnemies.forEach(timeoutId => clearTimeout(timeoutId));
+    spawningEnemies = [];
 
-function updateEnemies(){
+    var amount = getRandomNumber(30) + 20;
+    if(gameVersion.includes("dev")){ amount = 10; }
+    log("Spawning " + amount + " TD enemies.");
+    
+    enemiesStillSpawning = true;
+    TDHealth = 5;
+    for (var i = 0; i < amount; i++){
+        spawningEnemies.push(setTimeout((currentId) => createEnemy(currentId), (1000 * i), i));
+    }
+    enemySpawnCapTimeout = setTimeout(() => {
+        enemiesStillSpawning = false;
+    }, 1000 * amount);
+    enemyMovementInterval = setInterval(updateEnemiesEngine, 1000 / 60);
+}
+var updateEnemies1 = false;
+var enemyMovementInterval = null;
+var spawningEnemies = [];
+var enemySpawnCapTimeout = null;
+function updateEnemiesEngine(){
     var enemies = document.getElementsByClassName("towerDefenseEnemy");
-    if(enemies.length == 0 && !enemiesStillSpawning){enemiesStillSpawning = true; win();}
+    if(enemies.length == 0 && !enemiesStillSpawning){
+        clearInterval(enemyMovementInterval);
+        win(6, 0); 
+        return;
+    }
+    
     for (var i = enemies.length - 1; i >= 0; i--){
         var enemy = enemies[i];
         var currentLeft = parseInt(enemy.style.left) || 0;
         var newLeft = currentLeft + (window.innerHeight / 600);
         enemy.style.left = newLeft + "px";
+        
         if (newLeft >= window.innerWidth) {
             TDHealth--;
             enemy.remove();
@@ -462,6 +517,7 @@ function updateFileExplorer(tree, currentID){
         insert += `<tr><td>` + actionButton + `</td><td>` + item.Name + `</td><td>` + item.fileSize + `MB</td><td>${isExecutable}</td><td>${isCorrectSystemFile}</td><td>${item.id}</td></tr>`;
     }
     if(currentFolderID == -1){
+        var test = null;
     }
     else if(findNodeById(tree,currentFolderID).parentID == -1){
         insert += "<tr><td><button onclick='openFolder(-1)'>Return To Top</button></td><td></td><td></td><td></td><td></td></tr>";
@@ -575,10 +631,11 @@ function tickDownTimer(){
     timeLeft--;
     if(gebid("timerForSpeedrun")) gebid("timerForSpeedrun").innerHTML = "Time Left: " + timeLeft;
     if(timeLeft <= 0){
-        gameOver("speedrun");
+        gameOver("speedrunTime");
     }
-}    gebid("statsMenu")?.addEventListener("click", function(){ openStats(); });
-    gebid("startMenu")?.addEventListener("click", function(){ openSystemMenu(); });
+}    
+gebid("statsMenu")?.addEventListener("click", function(){ openStats(); });
+gebid("startMenu")?.addEventListener("click", function(){ openSystemMenu(); });
     
 document.body.addEventListener("keydown", function(event){
     if(event.key.toLowerCase() === "d" && gebid("logs")){
